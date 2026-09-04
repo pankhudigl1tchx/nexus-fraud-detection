@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import {
   Activity, AlertTriangle, ArrowUpRight, Check, CircleDot, Cloud, Crosshair,
   Database, Gauge, GitBranch, Search, ShieldAlert, SlidersHorizontal,
@@ -211,63 +211,77 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [apiOnline, setApiOnline] = useState(false)
 
-  const scenario = scenarios.find(s => s.id === scenarioId) ?? scenarios[1]
-  
+  const scenario = useMemo(() => 
+    scenarios.find(s => s.id === scenarioId) ?? scenarios[1],
+    [scenarioId]
+  )
+
   const matching = useMemo(() => 
     scenario.nodes.filter(n => `${n.id} ${meta[n.type].label}`.toLowerCase().includes(query.toLowerCase())), 
     [scenario, query]
   )
-  
+
   const nodeMap = useMemo(() => 
     new Map(scenario.nodes.map(n => [n.id, n])), 
     [scenario]
   )
 
-  const triggerBackendAnalysis = async (currentScenario: Scenario, customHeat?: number) => {
-    setLoading(true)
-    try {
-      const payload = {
-        ...currentScenario.payload,
-        is_suspicious_event: (customHeat !== undefined ? customHeat : currentScenario.heat) > 0.5
-      }
-
-      const response = await fetch('http://localhost:8000/analyze-loan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        const data: ApiResponse = await response.json()
-        setApiData(data)
-        setApiOnline(true)
-      } else {
-        setApiOnline(false)
-      }
-    } catch {
-      setApiOnline(false)
-      setApiData(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    triggerBackendAnalysis(scenario, heat)
-  }, [scenarioId, heat, scenario])
+    const controller = new AbortController()
+    setLoading(true)
 
-  function selectScenario(id: string) { 
+    const triggerBackendAnalysis = async () => {
+      try {
+        const payload = {
+          ...scenario.payload,
+          is_suspicious_event: heat > 0.5
+        }
+
+        const response = await fetch('http://localhost:8000/analyze-loan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        })
+
+        if (response.ok) {
+          const data: ApiResponse = await response.json()
+          setApiData(data)
+          setApiOnline(true)
+        } else {
+          setApiOnline(false)
+          setApiData(null)
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name !== 'AbortError') {
+          setApiOnline(false)
+          setApiData(null)
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    triggerBackendAnalysis()
+
+    return () => controller.abort()
+  }, [scenario, heat])
+
+  const selectScenario = useCallback((id: string) => { 
     const next = scenarios.find(s => s.id === id) ?? scenarios[1] 
     setScenarioId(id) 
     setHeat(next.heat) 
     setSelectedNode(null) 
     setToast('') 
-  }
+  }, [])
 
-  function decide(action: string) { 
+  const decide = useCallback((action: string) => { 
     setToast(`${action} recorded for ${scenario.application}`) 
-    setTimeout(() => setToast(''), 2800) 
-  }
+    const timer = setTimeout(() => setToast(''), 2800) 
+    return () => clearTimeout(timer)
+  }, [scenario.application])
 
   const displayScore = apiData ? apiData.risk_score : scenario.score
   const displayTier = apiData ? apiData.risk_tier : (heat < 0.4 ? 'ENHANCED VERIFICATION' : scenario.tier)
@@ -371,7 +385,7 @@ export default function Page() {
                 {scenario.edges.map(([from, to], i) => { 
                   const a = nodeMap.get(from); 
                   const b = nodeMap.get(to); 
-                  return a && b ? <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="rgba(148, 163, 184, 0.25)" strokeWidth="0.4" strokeDasharray="1 0.5" /> : null 
+                  return a && b ? <line key={`${from}-${to}-${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="rgba(148, 163, 184, 0.25)" strokeWidth="0.4" strokeDasharray="1 0.5" /> : null 
                 })}
                 {matching.map(n => { 
                   const size = n.type === 'applicant' ? 5.2 : 5 + n.heat * 3; 
@@ -431,8 +445,8 @@ export default function Page() {
               <section>
                 <SectionTitle icon={<GitBranch className="size-3.5 text-blue-400" />} title="SHAP Explainability" />
                 <div className="space-y-1.5">
-                  {displayDrivers.map((d: string) => (
-                    <div key={d} className="flex items-center gap-2 rounded bg-slate-950/50 border border-slate-800/80 px-2.5 py-1.5 text-xs text-slate-300 font-mono">
+                  {displayDrivers.map((d: string, index: number) => (
+                    <div key={`${d}-${index}`} className="flex items-center gap-2 rounded bg-slate-950/50 border border-slate-800/80 px-2.5 py-1.5 text-xs text-slate-300 font-mono">
                       <span className="text-blue-400 font-bold">+</span>
                       <span>{d}</span>
                     </div>
@@ -473,7 +487,7 @@ export default function Page() {
                 />
               </section>
 
-              <div className="flex items-start gap-2 rounded.lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
+              <div className="flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
                 <Database className="mt-0.5 size-4 shrink-0 text-blue-400" />
                 <span>{scenario.baseline}</span>
               </div>
