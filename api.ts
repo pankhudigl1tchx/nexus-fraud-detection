@@ -1,6 +1,8 @@
-export async function analyzeLoan(loanData) {
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nexus-fraud-detection.onrender.com";
+
+export async function analyzeLoan(loanData: any) {
   try {
-    const response = await fetch("http://localhost:8000/analyze-loan", {
+    const response = await fetch(`${API_BASE_URL}/analyze-loan`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
