@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import React, { useMemo, useState, useEffect, useCallback } from 'react'
 import {
   Activity, AlertTriangle, ArrowUpRight, Check, CircleDot, Cloud, Crosshair,
   Database, Gauge, GitBranch, Search, ShieldAlert, SlidersHorizontal,
@@ -211,20 +211,20 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [apiOnline, setApiOnline] = useState(false)
 
-  const scenario = useMemo(() => 
-    scenarios.find(s => s.id === scenarioId) ?? scenarios[1],
-    [scenarioId]
-  )
+  const scenario = useMemo(() => {
+    const matched = scenarios.find((s) => s.id === scenarioId)
+    return matched ?? scenarios[1]
+  }, [scenarioId])
 
-  const matching = useMemo(() => 
-    scenario.nodes.filter(n => `${n.id} ${meta[n.type].label}`.toLowerCase().includes(query.toLowerCase())), 
-    [scenario, query]
-  )
+  const matching = useMemo(() => {
+    return scenario.nodes.filter((n) =>
+      `${n.id} ${meta[n.type].label}`.toLowerCase().includes(query.toLowerCase())
+    )
+  }, [scenario, query])
 
-  const nodeMap = useMemo(() => 
-    new Map(scenario.nodes.map(n => [n.id, n])), 
-    [scenario]
-  )
+  const nodeMap = useMemo(() => {
+    return new Map(scenario.nodes.map((n) => [n.id, n]))
+  }, [scenario])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -270,7 +270,7 @@ export default function Page() {
   }, [scenario, heat])
 
   const selectScenario = useCallback((id: string) => { 
-    const next = scenarios.find(s => s.id === id) ?? scenarios[1] 
+    const next = scenarios.find((s) => s.id === id) ?? scenarios[1] 
     setScenarioId(id) 
     setHeat(next.heat) 
     setSelectedNode(null) 
