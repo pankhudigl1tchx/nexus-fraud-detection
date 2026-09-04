@@ -211,19 +211,36 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [apiOnline, setApiOnline] = useState(false)
 
+  // Explicit loop avoids Array.prototype.find signature mismatch (TS2554)
   const scenario = useMemo(() => {
-    const matched = scenarios.find((s) => s.id === scenarioId)
+    let matched: Scenario | undefined
+    for (let i = 0; i < scenarios.length; i++) {
+      if (scenarios[i].id === scenarioId) {
+        matched = scenarios[i]
+        break
+      }
+    }
     return matched ?? scenarios[1]
   }, [scenarioId])
 
+  // Explicit loop avoids Array.prototype.filter signature mismatch (TS2554)
   const matching = useMemo(() => {
-    return scenario.nodes.filter((n) =>
-      `${n.id} ${meta[n.type].label}`.toLowerCase().includes(query.toLowerCase())
-    )
+    const result: NodeData[] = []
+    for (let i = 0; i < scenario.nodes.length; i++) {
+      const n = scenario.nodes[i]
+      if (`${n.id} ${meta[n.type].label}`.toLowerCase().includes(query.toLowerCase())) {
+        result.push(n)
+      }
+    }
+    return result
   }, [scenario, query])
 
   const nodeMap = useMemo(() => {
-    return new Map(scenario.nodes.map((n) => [n.id, n]))
+    const map = new Map<string, NodeData>()
+    for (let i = 0; i < scenario.nodes.length; i++) {
+      map.set(scenario.nodes[i].id, scenario.nodes[i])
+    }
+    return map
   }, [scenario])
 
   useEffect(() => {
@@ -270,9 +287,16 @@ export default function Page() {
   }, [scenario, heat])
 
   const selectScenario = useCallback((id: string) => { 
-    const next = scenarios.find((s) => s.id === id) ?? scenarios[1] 
+    let next: Scenario | undefined
+    for (let i = 0; i < scenarios.length; i++) {
+      if (scenarios[i].id === id) {
+        next = scenarios[i]
+        break
+      }
+    }
+    const activeScenario = next ?? scenarios[1]
     setScenarioId(id) 
-    setHeat(next.heat) 
+    setHeat(activeScenario.heat) 
     setSelectedNode(null) 
     setToast('') 
   }, [])
